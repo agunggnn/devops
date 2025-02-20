@@ -1,0 +1,173 @@
+apiVersion: v1
+data:
+  01_sources.conf: |-
+    ## logs from podman
+    <source>
+      @type tail
+      @id in_tail_container_logs
+      @label @KUBERNETES
+      path /var/log/containers/*.log
+      pos_file /var/log/fluentd-containers.log.pos
+      tag kubernetes.*
+      read_from_head true
+      emit_unmatched_lines true
+      <parse>
+        @type multi_format
+        <pattern>
+          format json
+          time_key time
+          time_type string
+          time_format "%Y-%m-%dT%H:%M:%S.%NZ"
+          keep_time_key false
+        </pattern>
+        <pattern>
+          format regexp
+          expression /^(?<time>.+) (?<stream>stdout|stderr)( (.))? (?<log>.*)$/
+          time_format '%Y-%m-%dT%H:%M:%S.%NZ'
+          keep_time_key false
+        </pattern>
+      </parse>
+    </source>
+
+    # expose metrics in prometheus format
+    <source>
+      @type prometheus
+      bind 0.0.0.0
+      port 24231
+      metrics_path /metrics
+    </source>
+  02_filters.conf: |-
+    <label @KUBERNETES>
+      <match kubernetes.var.log.containers.fluentd**>
+        @type relabel
+        @label @FLUENT_LOG
+      </match>
+
+       #<match kubernetes.var.log.containers.**_kube-system_**>
+       #  @type null
+       #  @id ignore_kube_system_logs
+       #</match>
+
+      <filter kubernetes.**>
+        @type kubernetes_metadata
+        @id filter_kube_metadata
+        skip_labels false
+        skip_container_metadata false
+        skip_namespace_metadata false
+        skip_master_url true
+      </filter>
+
+      <filter kubernetes.**>
+        @type grep
+        <exclude>
+          key log
+          pattern ^\s*$
+        </exclude>
+      </filter>
+
+      <filter kubernetes.**>
+        @type record_transformer
+        enable_ruby
+        <record>
+          # Extract the JSON part if it exists after the "INFO" or other prefixes
+          log ${record['log'] =~ /(\{.*\})/ ? $1 : record['log']}      # some of stderr log array is missing, change with below.
+        </record>
+      </filter>
+
+      <filter kubernetes.**>
+        @type parser
+        key_name log
+        format json
+        reserve_data true  # Keep the original log data to avoid overwriting it
+        <parse>
+          @type json
+        </parse>
+        <remove_keys>
+          log
+        </remove_keys>
+        <inject_on_error>
+          false  # Prevent overwriting when JSON parsing fails
+        </inject_on_error>
+      </filter>
+
+      <filter kubernetes.**>
+        @type record_transformer
+        enable_ruby
+        <record>
+          log ${record['log'].is_a?(String) ? record['log'] : record['log'].to_json}
+          @timestamp ${record['time'] || Time.now.strftime('%Y-%m-%dT%H:%M:%S.%L%z')}
+        </record>
+      </filter>
+
+    # Use grep to filter logs by namespace
+    <filter kubernetes.**>
+      @type grep
+      <regexp>
+        key $.kubernetes.namespace_name  # Filtering based on namespace
+        pattern ^crm.*$            # Specify the namespace to match
+      </regexp>
+    </filter>
+
+      <match **>
+        @type relabel
+        @label @DISPATCH
+      </match>
+    </label>
+  03_dispatch.conf: |-
+    <label @DISPATCH>
+      <filter **>
+        @type prometheus
+        <metric>
+          name fluentd_input_status_num_records_total
+          type counter
+          desc The total number of incoming records
+          <labels>
+            tag ${tag}
+            hostname ${hostname}
+          </labels>
+        </metric>
+      </filter>
+
+      <match **>
+        @type relabel
+        @label @OUTPUT
+      </match>
+    </label>
+  04_outputs.conf: |-
+    <label @OUTPUT>
+      <match **>
+        @type elasticsearch
+        host 10.0.156.67
+        port 9200
+        scheme http  # Change to https if needed
+        tag_key "@log_name"
+        index_name fluentd-${time_slice}
+        logstash_format true
+        logstash_prefix fluentd
+        logstash_dateformat %Y.%m.%d
+        path "/"
+        include_timestamp true
+        time_key "@timestamp"
+        time_key_format "%Y-%m-%dT%H:%M:%S.%L%z"
+        buffer_chunk_limit 8m
+        buffer_queue_limit 128
+        flush_interval 10s
+        retry_max_times 5
+      </match>
+    </label>
+kind: ConfigMap
+metadata:
+  annotations:
+    meta.helm.sh/release-name: fluentd
+    meta.helm.sh/release-namespace: logging
+  creationTimestamp: "2024-09-12T10:13:57Z"
+  labels:
+    app.kubernetes.io/instance: fluentd
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluentd
+    app.kubernetes.io/version: v1.16.2
+    helm.sh/chart: fluentd-0.5.2
+  name: fluentd-config-fluentd
+  namespace: logging
+  resourceVersion: "48987115"
+  uid: e4bb3beb-5b69-42e4-b81a-8852fdc51d7e

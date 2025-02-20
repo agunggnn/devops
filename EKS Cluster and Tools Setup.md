@@ -7,6 +7,10 @@
   curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
   sudo mv /tmp/eksctl /usr/local/bin
   ```
+- Amazon EKS IAM Role:
+  [Guide Link](https://docs.aws.amazon.com/eks/latest/userguide/service_IAM_role.html)
+- eksctl Command:
+  [Guide Link](https://docs.aws.amazon.com/eks/latest/userguide/install-kubectl.html)
 
 ## Cluster Configuration
 - Set the following variables:
@@ -21,11 +25,13 @@
   ```bash
   eksctl create cluster --name $cluster_name --region $region_code --version $kube_version --without-nodegroup --node-private-networking
   ```
+  [Documentation Reference](https://docs.aws.amazon.com/eks/latest/userguide/create-cluster.html)
 
 - **Custom Config Cluster Creation**:
   ```bash
   eksctl create cluster --name $cluster_name --region $region_code --version $kube_version --vpc-private-subnets subnet-0d440336f7d4c4930,subnet-0e49933c68c4f809e,subnet-0c9321758150e24a1 --without-nodegroup
   ```
+  [Documentation Reference](https://docs.aws.amazon.com/eks/latest/userguide/create-cluster.html)
 
 ## Node Group Configuration
 - **Create Nodegroup without Launch Template**:
@@ -43,6 +49,7 @@
     --subnet-ids subnet-0dd08c4ab055062f4,subnet-0cd5cf572c209f703,subnet-08d0d231e13f37ba2 \
     --node-private-networking
   ```
+  [Documentation Reference](https://docs.aws.amazon.com/eks/latest/userguide/create-managed-node-group.html)
 
 - **Single Node Group Subnet**:
   ```bash
@@ -60,6 +67,7 @@
     --node-private-networking \
     --managed
   ```
+  [Documentation Reference](https://docs.aws.amazon.com/eks/latest/userguide/create-managed-node-group.html)
 
 - **ARM64 Node Group**:
   ```bash
@@ -77,6 +85,7 @@
     --node-private-networking \
     --managed
   ```
+  [Documentation Reference](https://docs.aws.amazon.com/eks/latest/userguide/create-managed-node-group.html)
 
 - **Update Nodegroup**:
   ```bash
@@ -87,6 +96,7 @@
 - **Nginx Ingress Controller**:
   - [Guide Link](https://aws.amazon.com/blogs/containers/exposing-kubernetes-applications-part-3-nginx-ingress-controller/)
   - [Guide Link (Indonesian)](https://aws.amazon.com/id/blogs/indonesia/mengekspos-aplikasi-kubernetes-bagian-3-nginx-ingress-controller/)
+  - [Documentation Reference](https://aws.amazon.com/blogs/containers/exposing-kubernetes-applications-part-3-nginx-ingress-controller/)
 
 - **ALB**:
   - Create IAM Policy:
@@ -123,12 +133,6 @@
       -n kube-system
     ```
 
-## Horizontal Pod Autoscaler (HPA)
-- **Check Existing CRD HPA**:
-  ```bash
-  kubectl get crd
-  ```
-
 ## Storage
 - **EBS**:
   - Create IAM Service Account:
@@ -150,47 +154,6 @@
 - **Prometheus**:
   - [Link](#)
 
-- **Grafana**:
-  - Add Helm Repo and Install Grafana:
-    ```bash
-    helm repo add grafana https://grafana.github.io/helm-charts
-    helm repo update
-    helm install grafana grafana/grafana --namespace monitoring --create-namespace
-    ```
-
-  - Get Admin Password:
-    ```bash
-    kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
-    ```
-
-  - Set Up Port Forwarding:
-    ```bash
-    kubectl port-forward --namespace monitoring svc/grafana 3000:80
-    ```
-
-  - Add Prometheus Data Source:
-    - Once logged in to Grafana, go to Configuration (the gear icon) and select Data Sources.
-    - Click Add data source.
-    - Select Prometheus.
-    - In the HTTP section, set the URL to your Prometheus server. If Prometheus is deployed within the same Kubernetes cluster, it might look like `http://prometheus-server.monitoring.svc.cluster.local:9090`.
-    - Click Save & Test to verify the connection.
-
-  - Persistent Storage:
-    - Create `grafana-values.yaml`:
-      ```yaml
-      persistence:
-        enabled: true
-        size: 5Gi  # Adjust the size as needed
-        storageClassName: gp2  # Ensure this matches your AWS EKS storage class
-        accessModes:
-          - ReadWriteOnce
-      ```
-
-    - Upgrade Grafana with Persistent Storage:
-      ```bash
-      helm upgrade grafana grafana/grafana -f grafana-values.yaml --namespace monitoring
-      ```
-
 ## Logging
 - **Audit Logging**:
   - [Guide Link](#)
@@ -198,9 +161,19 @@
 - **CloudWatch Logging & Monitoring**:
   - [Guide Link](#)
 
-- **Logstash using Helm**:
-  - Installation and Configuration:
-    - Manage Fluentd config to parse logs to Elasticsearch.
+- **Fluentd**:
+  - Install Fluentd using Helm:
+    ```bash
+    helm repo add fluent https://fluent.github.io/helm-charts
+    helm repo update
+    helm install fluentd fluent/fluentd -n logging
+    ```
+  - Configure Fluentd:
+    - Create a ConfigMap with the Fluentd configuration:
+      ```bash
+      kubectl apply -f fluentd-config.yml
+      ```
+    - [Fluentd Configuration File](./fluentd-config.yml)
 
 ## HashiCorp Vault
 - **High Level Architecture**:

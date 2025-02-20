@@ -19,6 +19,7 @@
 - **Orchestration**: Used for deploying microservices.
 - **Nodegroup**: Using AMD64 architecture for cost efficiency.
 - **Installation**: Currently using CloudFormation, with plans to switch to Terraform.
+- **Setup**: Detailed setup instructions for EKS cluster can be found [here](./EKS%20Cluster%20Installation.md).
 
 ### Amazon S3
 - **Storage**: Used for storing Helm templates.
@@ -52,7 +53,7 @@
 - **CI/CD**: Implemented using GitHub Actions.
 
 ### EKS Cluster
-- **Setup**: Detailed setup instructions for EKS cluster.
+- **Setup**: Detailed setup instructions for EKS cluster can be found [here](./EKS%20Cluster%20Installation.md).
 
 ## Maintenance
 
